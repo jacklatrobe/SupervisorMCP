@@ -419,6 +419,95 @@ def report_problem(job_id: str, problem_description: str, context: str, severity
     return supervisor_service.report_problem(job_id, problem_description, context, severity)
 
 
+@mcp.tool()
+def get_all_jobs() -> dict:
+    """Get comprehensive list of all jobs with their current status.
+    
+    Returns:
+        Dictionary containing all jobs with tasks and progress information
+    """
+    try:
+        all_jobs = supervisor_service.storage.get_all_jobs()
+        jobs_data = []
+        
+        for job in all_jobs:
+            job_data = {
+                "job_id": job.id,
+                "title": job.title,
+                "description": job.description,
+                "agent_id": job.agent_id,
+                "progress": f"{job.progress:.1f}%",
+                "is_completed": job.is_completed,
+                "task_count": len(job.tasks),
+                "created_at": job.created_at.isoformat(),
+                "updated_at": job.updated_at.isoformat(),
+                "tasks_summary": {
+                    "pending": sum(1 for t in job.tasks if t.status == TaskStatus.PENDING),
+                    "in_progress": sum(1 for t in job.tasks if t.status == TaskStatus.IN_PROGRESS),
+                    "completed": sum(1 for t in job.tasks if t.status == TaskStatus.COMPLETED),
+                    "failed": sum(1 for t in job.tasks if t.status == TaskStatus.FAILED)
+                }
+            }
+            jobs_data.append(job_data)
+        
+        return {
+            "total_jobs": len(jobs_data),
+            "jobs": jobs_data,
+            "retrieved_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve all jobs: {e}")
+        return {"error": f"Failed to retrieve jobs: {str(e)}"}
+
+
+@mcp.tool()
+def get_job_tasks(job_id: str) -> dict:
+    """Get detailed task information for a specific job.
+    
+    Args:
+        job_id: Unique identifier for the job
+    
+    Returns:
+        Dictionary containing all tasks for the specified job
+    """
+    try:
+        job = supervisor_service.storage.get_job(job_id)
+        if not job:
+            return {"error": "Job not found"}
+        
+        tasks_data = []
+        for task in job.tasks:
+            task_data = {
+                "task_id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "status": task.status.value,
+                "priority": task.priority.value,
+                "estimated_minutes": task.estimated_minutes,
+                "created_at": task.created_at.isoformat(),
+                "updated_at": task.updated_at.isoformat()
+            }
+            tasks_data.append(task_data)
+        
+        # Find next pending task
+        next_task = job.get_next_pending_task()
+        
+        return {
+            "job_id": job_id,
+            "job_title": job.title,
+            "progress": f"{job.progress:.1f}%",
+            "total_tasks": len(tasks_data),
+            "next_pending_task": next_task.title if next_task else None,
+            "tasks": tasks_data,
+            "retrieved_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve tasks for job {job_id}: {e}")
+        return {"error": f"Failed to retrieve tasks: {str(e)}"}
+
+
 # MCP Resources Implementation
 @mcp.resource("jobs://all")
 def get_all_jobs() -> str:

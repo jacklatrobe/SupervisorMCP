@@ -14,6 +14,6 @@ EXPOSE 8000
 # Configure FastMCP to bind to all interfaces
 ENV MCP_HOST=0.0.0.0
 ENV MCP_PORT=8000
-
+a
 # Run the server
 CMD ["python", "src/server.py"]
