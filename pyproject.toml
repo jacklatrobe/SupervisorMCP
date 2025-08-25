@@ -9,6 +9,7 @@ description = "Simple MCP supervisor server"
 dependencies = [
     "mcp>=1.0.0",
     "pydantic>=2.5.0",
+    "openai>=1.0.0",
 ]
 requires-python = ">=3.11"
 
