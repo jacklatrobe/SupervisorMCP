@@ -148,7 +148,45 @@ This test script validates the functionality of the SupervisorMCP server. Follow
 
 ---
 
-### Test 7: Load and Performance
+### Test 7: Job Pruning and Cleanup
+**Objective**: Test job deletion functionality with `prune_job`.
+
+**Steps**:
+1. Create a test job specifically for deletion:
+   ```json
+   {
+     "job_description": "Temporary job for deletion testing - implement basic calculator",
+     "agent_id": "test-agent-prune",
+     "priority": "low"
+   }
+   ```
+2. Verify the job exists using `get_all_jobs`
+3. Prune the job using `prune_job`:
+   ```json
+   {
+     "job_id": "[job_id_from_step_1]"
+   }
+   ```
+4. Verify the job is removed using `get_all_jobs`
+5. Test error handling by trying to prune non-existent job:
+   ```json
+   {
+     "job_id": "invalid-job-id-12345"
+   }
+   ```
+
+**Expected Results**:
+- Job creation succeeds and appears in job list
+- `prune_job` returns success message with job title and task count
+- Job no longer appears in `get_all_jobs` after pruning
+- Attempting to prune non-existent job returns appropriate error message
+- Other jobs remain unaffected
+
+**Success Criteria**: ✅ Job pruning works correctly and handles errors gracefully
+
+---
+
+### Test 8: Load and Performance
 **Objective**: Basic load testing for stability.
 
 **Steps**:
@@ -168,7 +206,7 @@ This test script validates the functionality of the SupervisorMCP server. Follow
 ## Critical Assessment Criteria
 
 ### ✅ PASS Conditions:
-- All 7 tests pass their success criteria
+- All 8 tests pass their success criteria
 - LLM responses are relevant and helpful
 - Data persistence works correctly
 - Error handling is robust

@@ -34,6 +34,10 @@ class StorageProtocol(Protocol):
     def get_task(self, job_id: str, task_id: str) -> Optional[Task]:
         """Retrieve a specific task."""
         ...
+    
+    def delete_job(self, job_id: str) -> bool:
+        """Delete a job and all its tasks from storage."""
+        ...
 
 
 # Concrete implementations following clean architecture
@@ -103,6 +107,14 @@ class JsonLineStorage:
         if not job:
             return None
         return next((task for task in job.tasks if task.id == task_id), None)
+    
+    def delete_job(self, job_id: str) -> bool:
+        """Delete a job and all its tasks from storage."""
+        if job_id in self._jobs_cache:
+            del self._jobs_cache[job_id]
+            self._save_all_data()
+            return True
+        return False
 
 
 # Service composition following dependency injection
@@ -222,6 +234,37 @@ class SupervisorService:
     def complete_task(self, job_id: str, task_id: str, completion_notes: str = "") -> Dict:
         """Complete a task and suggest next actions."""
         return self.update_task(job_id, task_id, TaskStatus.COMPLETED.value, completion_notes)
+    
+    def prune_job(self, job_id: str) -> Dict:
+        """Delete a job and all its associated tasks."""
+        try:
+            # Check if job exists
+            job = self.storage.get_job(job_id)
+            if not job:
+                return {"error": "Job not found"}
+            
+            # Store job info for response
+            job_title = job.title
+            task_count = len(job.tasks)
+            
+            # Delete the job and all its tasks
+            success = self.storage.delete_job(job_id)
+            
+            if success:
+                logger.info(f"Pruned job {job_id} ({job_title}) with {task_count} tasks")
+                return {
+                    "job_id": job_id,
+                    "title": job_title,
+                    "tasks_deleted": task_count,
+                    "message": f"Successfully pruned job '{job_title}' and all {task_count} associated tasks",
+                    "success": True
+                }
+            else:
+                return {"error": "Failed to delete job"}
+                
+        except Exception as e:
+            logger.error(f"Failed to prune job {job_id}: {e}")
+            return {"error": f"Failed to prune job: {str(e)}"}
     
     def analyze_problem(self, description: str, context: str, severity: str) -> Dict:
         """Analyze a problem and provide solutions using LLM."""

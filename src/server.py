@@ -174,6 +174,19 @@ def get_job_tasks(job_id: str) -> dict:
         return {"error": f"Failed to retrieve tasks: {str(e)}"}
 
 
+@mcp.tool()
+def prune_job(job_id: str) -> dict:
+    """Delete a job and all its associated tasks.
+    
+    Args:
+        job_id: Unique identifier for the job to prune
+    
+    Returns:
+        Dictionary containing deletion confirmation and details
+    """
+    return supervisor_service.prune_job(job_id)
+
+
 # MCP Resources Implementation
 @mcp.resource("jobs://all")
 def get_all_jobs_resource() -> str:
