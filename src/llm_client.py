@@ -27,7 +27,7 @@ class SupervisorLLMClient:
         self.model = "gpt-5-mini"  # Model that supports structured outputs
         logger.info("SupervisorLLM client initialized with structured outputs support")
     
-    def chat_completion(self, messages: List[Dict], max_tokens: int = 500, temperature: float = 0.7) -> str:
+    def chat_completion(self, messages: List[Dict], max_tokens: int = 2000, temperature: float = 1) -> str:
         """Get a traditional chat completion from OpenAI (legacy method).
         
         Args:
@@ -42,7 +42,7 @@ class SupervisorLLMClient:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
                 temperature=temperature
             )
             return response.choices[0].message.content or ""
@@ -54,8 +54,8 @@ class SupervisorLLMClient:
         self, 
         messages: List[Dict], 
         response_model: Type[T], 
-        max_tokens: int = 1000,
-        temperature: float = 0.7
+        max_tokens: int = 2000,
+        temperature: float = 1
     ) -> T:
         """Get a structured completion using Pydantic models.
         
@@ -79,7 +79,7 @@ class SupervisorLLMClient:
                 model=self.model,
                 messages=messages,
                 response_format=response_model,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
                 temperature=temperature
             )
             

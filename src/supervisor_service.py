@@ -402,8 +402,8 @@ class SupervisorService:
             analysis_task = self.llm_client.structured_completion(
                 messages=messages,
                 response_model=ProblemAnalysisTask,
-                max_tokens=350,
-                temperature=0.4
+                max_tokens=7500,
+                temperature=1.0
             )
             
             # Ensure the focus and context are set correctly (LLM might not fill these properly)
@@ -450,8 +450,8 @@ class SupervisorService:
             analysis = self.llm_client.structured_completion(
                 messages=messages, 
                 response_model=SimpleProblemAnalysis,
-                max_tokens=700,
-                temperature=0.4
+                max_tokens=7500,
+                temperature=1.0
             )
             
             return {
@@ -489,8 +489,8 @@ class SupervisorService:
             feedback = self.llm_client.structured_completion(
                 messages=messages, 
                 response_model=SimpleFeedbackResponse,
-                max_tokens=150, 
-                temperature=0.6
+                max_tokens=750, 
+                temperature=1.0
             )
             
             return {
@@ -519,8 +519,8 @@ class SupervisorService:
             structured_response = self.llm_client.structured_completion(
                 messages=messages, 
                 response_model=TaskBreakdownResponse,
-                max_tokens=800,
-                temperature=0.3  # Lower temperature for more consistent task breakdown
+                max_tokens=2500,
+                temperature=1.0  # Use default temperature for model compatibility
             )
             
             # Convert structured response to format expected by existing code
