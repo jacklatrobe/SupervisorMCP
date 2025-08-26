@@ -7,7 +7,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol
 
-from schemas import Job, Task, TaskStatus, Priority
+from schemas import (
+    Job, Task, TaskStatus, Priority, RiskLevel,
+    TaskBreakdownResponse, ProblemAnalysisResponse, TaskFeedbackResponse
+)
 
 logger = logging.getLogger(__name__)
 
@@ -267,9 +270,12 @@ class SupervisorService:
             return {"error": f"Failed to prune job: {str(e)}"}
     
     def analyze_problem(self, description: str, context: str, severity: str) -> Dict:
-        """Analyze a problem and provide solutions using LLM."""
-        system_prompt = "You are an expert supervisor helping analyze and solve problems. Provide practical, actionable solutions."
-        user_prompt = f"Problem: {description}\nContext: {context}\nSeverity: {severity}\n\nPlease analyze this problem and provide 3-5 specific, actionable solutions."
+        """Analyze a problem and provide solutions using structured LLM output."""
+        system_prompt = """You are an expert supervisor helping analyze and solve problems. 
+        Provide practical, actionable solutions with clear risk assessment.
+        Focus on solutions that can be implemented quickly and effectively."""
+        
+        user_prompt = f"Problem: {description}\nContext: {context}\nSeverity: {severity}\n\nAnalyze this problem and provide specific, actionable solutions."
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -277,12 +283,26 @@ class SupervisorService:
         ]
         
         try:
-            analysis_text = self.llm_client.chat_completion(messages, max_tokens=500)
-            solutions = self._extract_solutions(analysis_text)
+            # Use structured outputs for reliable problem analysis
+            analysis = self.llm_client.structured_completion(
+                messages=messages, 
+                response_model=ProblemAnalysisResponse,
+                max_tokens=700,
+                temperature=0.4
+            )
             
             return {
-                "analysis": f"AI Analysis for {severity} severity problem",
-                "solutions": solutions,
+                "analysis": analysis.analysis_summary,
+                "solutions": [
+                    {
+                        "title": sol.title,
+                        "description": sol.description,
+                        "estimated_time": sol.estimated_time_minutes
+                    }
+                    for sol in analysis.solutions
+                ],
+                "risk_level": analysis.risk_level.value,
+                "requires_escalation": analysis.requires_escalation,
                 "estimated_time": self._estimate_time(severity),
                 "ai_powered": True
             }
@@ -291,7 +311,7 @@ class SupervisorService:
             raise
     
     def generate_task_feedback(self, job_title: str, task_title: str, status: str, details: str) -> Dict:
-        """Generate feedback for task updates using LLM."""
+        """Generate feedback for task updates using structured LLM."""
         system_prompt = "You are a helpful supervisor providing feedback on task progress. Be encouraging but constructive."
         user_prompt = f"Job: {job_title}\nTask: {task_title} (Status: {status})\nDetails: {details}\n\nProvide brief, encouraging feedback and next steps."
         
@@ -301,11 +321,19 @@ class SupervisorService:
         ]
         
         try:
-            feedback_text = self.llm_client.chat_completion(messages, max_tokens=300, temperature=0.6)
+            # Use structured outputs for consistent feedback format
+            feedback = self.llm_client.structured_completion(
+                messages=messages, 
+                response_model=TaskFeedbackResponse,
+                max_tokens=400, 
+                temperature=0.6
+            )
             
             return {
-                "message": feedback_text,
-                "suggestions": ["Keep up the great work!", "Document key insights"],
+                "message": feedback.message,
+                "suggestions": feedback.suggestions,
+                "celebration_worthy": feedback.celebration_worthy,
+                "potential_blockers": feedback.potential_blockers,
                 "ai_powered": True
             }
         except Exception as e:
@@ -313,23 +341,14 @@ class SupervisorService:
             raise
     
     def breakdown_job(self, description: str) -> List[Dict]:
-        """Break down a job into tasks using LLM."""
-        system_prompt = """You are a project manager breaking down work into actionable tasks. 
-        Create 3-5 specific, actionable tasks. For each task, provide:
-        - title: Clear, concise task title
-        - description: Specific what needs to be done
-        - estimated_minutes: Realistic time estimate
-        - priority: high, medium, or low
+        """Break down a job into tasks using structured LLM outputs.
         
-        Respond in this exact format:
-        TASK 1:
-        Title: [title]
-        Description: [description]  
-        Estimated Minutes: [number]
-        Priority: [priority]
-        
-        TASK 2:
-        [etc...]"""
+        Following Clean Code principles: single responsibility (job breakdown),
+        dependency inversion (uses LLM client interface), and eliminating manual parsing.
+        """
+        system_prompt = """You are an expert project manager breaking down work into actionable tasks. 
+        Create 3-5 specific, actionable tasks with realistic time estimates.
+        Focus on clear, achievable deliverables that can be completed independently."""
         
         user_prompt = f"Break down this job into actionable tasks:\n\n{description}"
         
@@ -339,10 +358,27 @@ class SupervisorService:
         ]
         
         try:
-            response = self.llm_client.chat_completion(messages, max_tokens=800)
-            return self._parse_task_breakdown(response)
+            # Use structured outputs instead of manual parsing
+            structured_response = self.llm_client.structured_completion(
+                messages=messages, 
+                response_model=TaskBreakdownResponse,
+                max_tokens=800,
+                temperature=0.3  # Lower temperature for more consistent task breakdown
+            )
+            
+            # Convert structured response to format expected by existing code
+            return [
+                {
+                    'title': task.title,
+                    'description': task.description,
+                    'estimated_minutes': task.estimated_minutes,
+                    'priority': task.priority.value
+                }
+                for task in structured_response.tasks
+            ]
+            
         except Exception as e:
-            logger.error(f"Job breakdown failed: {e}")
+            logger.error(f"Structured job breakdown failed: {e}")
             raise
     
     def _generate_clean_title(self, description: str) -> str:
@@ -377,16 +413,6 @@ class SupervisorService:
             tasks.append(task)
         return tasks
     
-    def _extract_solutions(self, text: str) -> List[str]:
-        """Extract solutions from LLM response."""
-        lines = text.split('\n')
-        solutions = []
-        for line in lines:
-            line = line.strip()
-            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '*'))):
-                solutions.append(line)
-        return solutions[:5]
-    
     def _estimate_time(self, severity: str) -> int:
         """Estimate resolution time based on severity."""
         time_mapping = {
@@ -396,46 +422,6 @@ class SupervisorService:
             "critical": 240
         }
         return time_mapping.get(severity.lower(), 60)
-    
-    def _parse_task_breakdown(self, response: str) -> List[Dict]:
-        """Parse the structured task breakdown response."""
-        tasks = []
-        current_task = {}
-        
-        for line in response.split('\n'):
-            line = line.strip()
-            if line.startswith('TASK'):
-                if current_task:
-                    tasks.append(current_task)
-                current_task = {}
-            elif line.startswith('Title:'):
-                current_task['title'] = line.replace('Title:', '').strip()
-            elif line.startswith('Description:'):
-                current_task['description'] = line.replace('Description:', '').strip()
-            elif line.startswith('Estimated Minutes:'):
-                try:
-                    minutes = int(line.replace('Estimated Minutes:', '').strip())
-                    current_task['estimated_minutes'] = minutes
-                except ValueError:
-                    current_task['estimated_minutes'] = 60
-            elif line.startswith('Priority:'):
-                priority = line.replace('Priority:', '').strip().lower()
-                current_task['priority'] = priority if priority in ['high', 'medium', 'low'] else 'medium'
-        
-        if current_task:
-            tasks.append(current_task)
-        
-        # Ensure we have valid tasks
-        if not tasks:
-            # Fallback if parsing fails
-            tasks = [{
-                'title': 'Complete Job',
-                'description': 'Execute the required work',
-                'estimated_minutes': 90,
-                'priority': 'high'
-            }]
-        
-        return tasks
 
 
 # Initialize services following dependency injection pattern

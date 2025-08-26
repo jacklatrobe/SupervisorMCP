@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TaskStatus(str, Enum):
@@ -75,3 +75,50 @@ class Job(BaseModel):
     def get_next_pending_task(self) -> Optional[Task]:
         """Get the next pending task in the job."""
         return next((task for task in self.tasks if task.status == TaskStatus.PENDING), None)
+
+
+# Structured Output Schemas for LLM Responses
+# Following Clean Code principles with clear, focused schemas
+
+class RiskLevel(str, Enum):
+    """Risk level enumeration for problem analysis."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class TaskBreakdownItem(BaseModel):
+    """Schema for individual task in LLM breakdown response."""
+    title: str = Field(..., description="Clear, concise task title")
+    description: str = Field(..., description="Specific description of what needs to be done")
+    estimated_minutes: int = Field(..., ge=1, le=600, description="Realistic time estimate in minutes")
+    priority: Priority = Field(..., description="Task priority level")
+
+
+class TaskBreakdownResponse(BaseModel):
+    """Schema for LLM task breakdown response."""
+    tasks: List[TaskBreakdownItem] = Field(..., min_items=1, max_items=10, description="List of actionable tasks")
+
+
+class Solution(BaseModel):
+    """Schema for individual problem solution."""
+    title: str = Field(..., description="Brief solution title")
+    description: str = Field(..., description="Detailed solution steps")
+    estimated_time_minutes: int = Field(..., ge=5, le=480, description="Time to implement solution")
+
+
+class ProblemAnalysisResponse(BaseModel):
+    """Schema for LLM problem analysis response."""
+    analysis_summary: str = Field(..., description="Brief analysis of the problem")
+    solutions: List[Solution] = Field(..., min_items=1, max_items=5, description="Actionable solutions")
+    risk_level: RiskLevel = Field(..., description="Risk assessment level")
+    requires_escalation: bool = Field(..., description="Whether problem needs escalation")
+
+
+class TaskFeedbackResponse(BaseModel):
+    """Schema for LLM task feedback response."""
+    message: str = Field(..., description="Encouraging feedback message")
+    suggestions: List[str] = Field(..., max_items=3, description="Helpful suggestions for next steps")
+    celebration_worthy: bool = Field(..., description="Whether this progress deserves celebration")
+    potential_blockers: List[str] = Field(default_factory=list, max_items=2, description="Potential issues to watch for")
