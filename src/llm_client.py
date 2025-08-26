@@ -3,6 +3,7 @@
 import logging
 import os
 from typing import Dict, List, Optional, Type, TypeVar
+from urllib.parse import urlparse
 
 import openai
 from openai import OpenAI
@@ -14,16 +15,56 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T', bound=BaseModel)
 
 
+def validate_openai_base_url(url: Optional[str]) -> Optional[str]:
+    """Validate OpenAI base URL format.
+    
+    Args:
+        url: URL to validate, can be None
+        
+    Returns:
+        The validated URL or None if input was None
+        
+    Raises:
+        ValueError: If URL format is invalid
+    """
+    if url is None:
+        return None
+        
+    if not url.strip():
+        return None
+        
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme in ('http', 'https'):
+            raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Must be 'http' or 'https'")
+        if not parsed.netloc:
+            raise ValueError("URL must include a valid host")
+        return url
+    except Exception as e:
+        if isinstance(e, ValueError):
+            raise
+        raise ValueError(f"Invalid URL format: {str(e)}")
+
+
 class SupervisorLLMClient:
     """OpenAI client with Structured Outputs support following SOLID principles."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = "https://api.openai.com/v1"):
         """Initialize the OpenAI client with structured outputs capability.
         
         Args:
             api_key: OpenAI API key, uses OPENAI_API_KEY env var if not provided
+            base_url: OpenAI API base URL, uses OPENAI_API_BASE_URL env var if not provided
         """
-        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+        # Validate base URL if provided
+        validated_base_url = validate_openai_base_url(
+            base_url or os.getenv("OPENAI_API_BASE_URL")
+        )
+        
+        self.client = OpenAI(
+            api_key=api_key or os.getenv("OPENAI_API_KEY"),
+            base_url=validated_base_url
+        )
         self.model = "gpt-5-mini"  # Model that supports structured outputs
         logger.info("SupervisorLLM client initialized with structured outputs support")
     

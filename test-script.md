@@ -65,6 +65,7 @@ This test script validates the functionality of the SupervisorMCP server. Follow
 1. Report a problem using current tool interface (the service will handle parameter requirements dynamically)
 2. Use a realistic problem scenario such as database connection issues, deployment failures, or integration problems
 3. Provide sufficient context about the problem situation
+4. Run get_all_problems and confirm the problem and solution is listed.
 
 **Expected Results**:
 - LLM analyzes problem and provides actionable solutions

@@ -122,3 +122,15 @@ class SimpleFeedbackResponse(BaseModel):
     """Simplified schema for task feedback - only used for in-progress updates."""
     supervisor_message: str = Field(..., description="Brief guidance message from supervisor")
     next_task: Optional[str] = Field(default=None, description="Title of next task if available")
+
+
+class ProblemSolution(BaseModel):
+    """Schema for persistent problem-solution storage."""
+    id: str = Field(..., description="Unique problem identifier")
+    problem_description: str = Field(..., min_length=1, description="Description of the problem")
+    steps_taken: List[str] = Field(..., description="Steps taken to address the problem")
+    job_id: Optional[str] = Field(default=None, description="Associated job ID if applicable")
+    analysis_summary: str = Field(..., description="Summary of the problem analysis")
+    solutions: List[Solution] = Field(..., min_items=1, description="Generated solutions")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")

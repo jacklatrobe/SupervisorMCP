@@ -4,132 +4,28 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Optional
 
 from schemas import (
-    Job, Task, TaskStatus, Priority,
+    Job, Task, TaskStatus, Priority, ProblemSolution,
     TaskBreakdownResponse, SimpleProblemAnalysis, SimpleFeedbackResponse,
     ProblemInput, ProblemAnalysisTask
 )
+from storage import StorageProtocol, JsonLineStorage, JsonLineProblemStorage
 
 import prompts
 
 logger = logging.getLogger(__name__)
-
-# Constants following clean code practices
-DEFAULT_STORAGE_FILE = "supervisor_data.jsonl"
-
-
-# Abstract interfaces following SOLID principles
-class StorageProtocol(Protocol):
-    """Protocol defining storage interface for dependency inversion."""
-    
-    def save_job(self, job: Job) -> Job:
-        """Save a job to storage."""
-        ...
-    
-    def get_job(self, job_id: str) -> Optional[Job]:
-        """Retrieve a job from storage."""
-        ...
-    
-    def get_all_jobs(self) -> List[Job]:
-        """Retrieve all jobs from storage."""
-        ...
-    
-    def get_task(self, job_id: str, task_id: str) -> Optional[Task]:
-        """Retrieve a specific task."""
-        ...
-    
-    def delete_job(self, job_id: str) -> bool:
-        """Delete a job and all its tasks from storage."""
-        ...
-
-
-# Concrete implementations following clean architecture
-class JsonLineStorage:
-    """JSON Lines storage implementation for persistent data."""
-    
-    def __init__(self, file_path: str = DEFAULT_STORAGE_FILE):
-        self.file_path = Path(file_path)
-        self._ensure_storage_exists()
-        self._jobs_cache: Dict[str, Job] = {}
-        self._load_data()
-    
-    def _ensure_storage_exists(self) -> None:
-        """Ensure storage file exists."""
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
-        if not self.file_path.exists():
-            self.file_path.touch()
-    
-    def _load_data(self) -> None:
-        """Load all jobs from storage into memory cache."""
-        try:
-            if self.file_path.stat().st_size == 0:
-                return
-                
-            with open(self.file_path, 'r', encoding='utf-8') as file:
-                for line in file:
-                    line = line.strip()
-                    if line:
-                        try:
-                            job_data = json.loads(line)
-                            job = Job(**job_data)
-                            self._jobs_cache[job.id] = job
-                        except (json.JSONDecodeError, ValueError) as e:
-                            logger.warning(f"Failed to parse job data: {e}")
-        except Exception as e:
-            logger.error(f"Failed to load storage: {e}")
-    
-    def _save_all_data(self) -> None:
-        """Save all jobs to storage."""
-        try:
-            with open(self.file_path, 'w', encoding='utf-8') as file:
-                for job in self._jobs_cache.values():
-                    job_json = job.model_dump_json()
-                    file.write(f"{job_json}\n")
-        except Exception as e:
-            logger.error(f"Failed to save storage: {e}")
-            raise
-    
-    def save_job(self, job: Job) -> Job:
-        """Save a job to storage."""
-        job.updated_at = datetime.utcnow()
-        self._jobs_cache[job.id] = job
-        self._save_all_data()
-        return job
-    
-    def get_job(self, job_id: str) -> Optional[Job]:
-        """Retrieve a job from storage."""
-        return self._jobs_cache.get(job_id)
-    
-    def get_all_jobs(self) -> List[Job]:
-        """Retrieve all jobs from storage."""
-        return list(self._jobs_cache.values())
-    
-    def get_task(self, job_id: str, task_id: str) -> Optional[Task]:
-        """Retrieve a specific task."""
-        job = self.get_job(job_id)
-        if not job:
-            return None
-        return next((task for task in job.tasks if task.id == task_id), None)
-    
-    def delete_job(self, job_id: str) -> bool:
-        """Delete a job and all its tasks from storage."""
-        if job_id in self._jobs_cache:
-            del self._jobs_cache[job_id]
-            self._save_all_data()
-            return True
-        return False
 
 
 # Service composition following dependency injection
 class SupervisorService:
     """Main supervisor service coordinating all components."""
     
-    def __init__(self, storage: StorageProtocol, llm_client):
+    def __init__(self, storage: StorageProtocol, llm_client, problem_storage: JsonLineProblemStorage):
         self.storage = storage
         self.llm_client = llm_client
+        self.problem_storage = problem_storage
     
     def create_job(self, description: str, priority: str = "medium") -> Dict:
         """Create a new job with LLM-powered task breakdown."""
@@ -230,6 +126,13 @@ class SupervisorService:
     def report_problem(self, job_id: Optional[str], problem_input: ProblemInput) -> Dict:
         """Report and analyze a problem with LLM intelligence using map-reduce approach."""
         try:
+            # Validate problem input
+            if not problem_input.problem_description or not problem_input.problem_description.strip():
+                return {"error": "Problem description cannot be empty"}
+            
+            if not problem_input.steps_taken or len(problem_input.steps_taken) == 0:
+                return {"error": "Steps taken cannot be empty"}
+            
             job = None
             if job_id:
                 job = self.storage.get_job(job_id)
@@ -241,9 +144,33 @@ class SupervisorService:
             
             logger.info(f"Analyzed problem{' for job ' + job_id if job_id else ' without job context'}")
             
-            result = {
-                "problem_analysis": solution
-            }
+            # Create and save problem solution to persistent storage
+            try:
+                problem_solution = ProblemSolution(
+                    id=f"problem_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{hash(problem_input.problem_description) % 10000:04d}",
+                    problem_description=problem_input.problem_description,
+                    steps_taken=problem_input.steps_taken,
+                    job_id=job_id,
+                    analysis_summary=solution["analysis_summary"],
+                    solutions=solution["solutions"]
+                )
+                
+                # Save to problem storage with error handling
+                self.problem_storage.save_problem(problem_solution)
+                logger.info(f"Saved problem solution to storage: {problem_solution.id}")
+                
+                result = {
+                    "problem_analysis": solution,
+                    "problem_id": problem_solution.id
+                }
+                
+            except Exception as storage_error:
+                logger.error(f"Failed to save problem solution to storage: {storage_error}")
+                # Still return the analysis even if storage fails
+                result = {
+                    "problem_analysis": solution,
+                    "storage_warning": f"Analysis completed but failed to save to storage: {str(storage_error)}"
+                }
             
             # Only include job_id in response if it was provided
             if job_id:
@@ -579,8 +506,11 @@ def create_supervisor_service():
     # Initialize storage
     storage = JsonLineStorage()
     
+    # Initialize problem storage
+    problem_storage = JsonLineProblemStorage()
+    
     # Initialize LLM client (required)
     llm_client = SupervisorLLMClient()
     
     # Create main service
-    return SupervisorService(storage, llm_client)
+    return SupervisorService(storage, llm_client, problem_storage)

@@ -189,6 +189,41 @@ def prune_job(job_id: str) -> dict:
     return supervisor_service.prune_job(job_id)
 
 
+@mcp.tool()
+def get_all_problems() -> dict:
+    """Get all stored problems and their solutions.
+    
+    Returns:
+        Dictionary containing all problems with their analysis and solutions
+    """
+    try:
+        all_problems = supervisor_service.problem_storage.get_all_problems()
+        problems_data = []
+        
+        for problem in all_problems:
+            problem_dict = {
+                "problem_id": problem.id,
+                "problem_description": problem.problem_description,
+                "steps_taken": problem.steps_taken,
+                "job_id": problem.job_id,
+                "analysis_summary": problem.analysis_summary,
+                "solutions": [{"title": sol.title, "description": sol.description} for sol in problem.solutions],
+                "created_at": problem.created_at.isoformat(),
+                "updated_at": problem.updated_at.isoformat()
+            }
+            problems_data.append(problem_dict)
+        
+        return {
+            "total_problems": len(problems_data),
+            "problems": problems_data,
+            "retrieved_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve all problems: {e}")
+        return {"error": f"Failed to retrieve problems: {str(e)}"}
+
+
 # Run server with proper transport configuration
 if __name__ == "__main__":
     logger.info("Starting SupervisorMCP server...")
