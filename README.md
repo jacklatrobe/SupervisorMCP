@@ -30,6 +30,7 @@ You can also use this across sessions, breaking changes up into multiple tasks, 
 docker build -t supervisor-mcp .
 docker run -d -e OPENAI_API_KEY="your-api-key" supervisor-mcp
 ```
+Note: The supervisor can also run against locally hosted LLMs by setting "-e OPENAI_API_BASE_URL=localhost:1234/v1" or similar, but they must support structured output, such as gpt-oss-20b, but results have been mixed.
 
 Adding the MCP server:
 ```json

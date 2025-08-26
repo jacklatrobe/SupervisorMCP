@@ -57,9 +57,14 @@ class SupervisorLLMClient:
             base_url: OpenAI API base URL, uses OPENAI_API_BASE_URL env var if not provided
         """
         # Validate base URL if provided
-        validated_base_url = validate_openai_base_url(
-            base_url or os.getenv("OPENAI_API_BASE_URL")
-        )
+        selected_base_url = os.getenv("OPENAI_API_BASE_URL", None)
+        if selected_base_url is None:
+            selected_base_url = base_url
+        validated_base_url = validate_openai_base_url(selected_base_url)
+        if validated_base_url:
+            logger.info(f"Using OpenAI base URL: {validated_base_url}")
+        else:
+            raise ValueError("A valid OpenAI base URL must be provided either via parameter or environment variable")
         
         self.client = OpenAI(
             api_key=api_key or os.getenv("OPENAI_API_KEY"),
