@@ -1,80 +1,43 @@
-# SupervisorMCP - Production-Ready AI Agent Supervisor
+# SupervisorMCP
 
-A robust Model Context Protocol (MCP) server that provides intelligent supervision and task management for AI agents with LLM-powered insights.
+An MCP server that provides intelligent task management for AI agents using OpenAI for job breakdown, progress tracking, and problem analysis.
 
-## ✅ **Production Status: READY**
+## Features
 
-**Comprehensive testing completed** - All 8 critical tests passed with excellent results. See [test-script.md](./test-script.md) for detailed test results.
+- **start_job** - Breaks complex jobs into actionable tasks using LLM analysis
+- **update_task** - Tracks progress with intelligent feedback generation  
+- **complete_task** - Marks tasks complete with next-step recommendations
+- **report_problem** - Analyzes problems using multi-perspective LLM approach
+- **get_all_jobs** / **get_job_tasks** - Retrieves job and task data
+- **prune_job** - Deletes jobs and associated tasks
 
-## Core Features
+## Architecture
 
-- **start_job**: Intelligent job creation with LLM-powered task breakdown into actionable items
-- **update_task**: Real-time progress tracking with AI-generated feedback and suggestions  
-- **complete_task**: Task completion with intelligent next-step recommendations
-- **report_problem**: Advanced problem analysis with LLM-generated solutions
-- **prune_job**: Complete job cleanup and deletion functionality
-- **get_all_jobs**: Comprehensive job listing with progress tracking
-- **get_job_tasks**: Detailed task management and status monitoring
+- **Clean separation**: Server, service, storage, and LLM client layers
+- **Data persistence**: JSON Lines storage for jobs and tasks
+- **Structured outputs**: Pydantic models with OpenAI structured completion
+- **Error handling**: Graceful failure modes with meaningful messages
 
-## Key Strengths
-
-✅ **Clean Architecture** - Separation of concerns with modular design  
-✅ **LLM Integration** - OpenAI-powered intelligent responses and analysis  
-✅ **Robust Data Persistence** - Reliable storage and retrieval of job/task data  
-✅ **Error Handling** - Graceful error management with user-friendly messages  
-✅ **Performance** - Sub-2-second response times under load  
-✅ **Scalability** - Handles multiple concurrent jobs without degradation
-
-## Quick Start
+## Setup
 
 ```bash
-# Docker deployment (recommended)
+# Set OpenAI API key
+export OPENAI_API_KEY="your-api-key"
+
+# Docker (recommended)
 docker build -t supervisor-mcp .
 docker run -it supervisor-mcp
 
 # Local development
-pip install -e .
 python src/server.py
 ```
 
-## Configuration
+## Requirements
 
-Set your OpenAI API key:
-```bash
-export OPENAI_API_KEY="your-api-key-here"
-```
+- Python 3.11+
+- OpenAI API key
+- Dependencies: `mcp`, `pydantic`, `openai`
 
-## Usage Examples
+## Testing
 
-### Create and manage a job:
-```
-@supervisor Create a web application with user authentication
-```
-
-### Track progress:
-```
-@supervisor Update task status to in_progress for task_id abc123
-```
-
-### Get help with problems:
-```  
-@supervisor Database connection failing in production environment
-```
-
-### Clean up completed work:
-```
-@supervisor Remove completed job xyz789
-```
-
-## Test Results
-
-**All 8 critical tests passed** including:
-- Job creation and task breakdown ✅
-- Task lifecycle management ✅  
-- Problem analysis and solutions ✅
-- Data persistence and retrieval ✅
-- Error handling and edge cases ✅
-- Job pruning and cleanup ✅
-- Load and performance testing ✅
-
-**Recommendation: PRODUCTION READY** 🚀
+See [test-script.md](./test-script.md) for comprehensive test procedures covering all functionality.
