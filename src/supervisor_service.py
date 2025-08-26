@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Protocol
 
 from schemas import (
     Job, Task, TaskStatus, Priority, RiskLevel,
-    TaskBreakdownResponse, ProblemAnalysisResponse, TaskFeedbackResponse
+    TaskBreakdownResponse, ProblemAnalysisResponse, SimpleFeedbackResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ class SupervisorService:
             return {"error": f"Failed to create job: {str(e)}"}
     
     def update_task(self, job_id: str, task_id: str, status: str, details: str) -> Dict:
-        """Update task status with LLM-powered feedback."""
+        """Update task status with simplified feedback logic."""
         try:
             job = self.storage.get_job(job_id)
             if not job:
@@ -186,17 +186,31 @@ class SupervisorService:
             # Save updated job
             self.storage.save_job(job)
             
-            # Generate LLM feedback
-            feedback = self.generate_task_feedback(
-                job.title, task.title, task.status.value, details
-            )
-            
-            # Add next steps
+            # Generate simplified feedback based on status
             next_task = job.get_next_pending_task()
-            if next_task:
-                feedback["next_steps"] = [f"Continue with: {next_task.title}"]
+            next_task_title = next_task.title if next_task else None
+            
+            if task_status == TaskStatus.COMPLETED:
+                # Simple static message for completed tasks
+                if next_task:
+                    supervisor_message = f"Task completed successfully! Moving on to the next task."
+                else:
+                    supervisor_message = "All tasks completed! Great job!"
+                    
+            elif task_status == TaskStatus.IN_PROGRESS and old_status == TaskStatus.PENDING:
+                # Simple acknowledgment for newly started tasks
+                supervisor_message = "Task acknowledged. Good luck! Update me when it's complete."
+                
+            elif task_status == TaskStatus.IN_PROGRESS:
+                # Use LLM for in-progress updates only
+                feedback = self._generate_simple_feedback(task.title, details)
+                supervisor_message = feedback["supervisor_message"]
+                
+            elif task_status == TaskStatus.FAILED:
+                supervisor_message = "Task marked as failed. Consider reporting the problem to the supervisor for analysis."
+                
             else:
-                feedback["next_steps"] = ["All tasks completed!"]
+                supervisor_message = "Task status updated."
             
             logger.info(f"Updated task {task_id} from {old_status} to {task_status}")
             
@@ -204,7 +218,8 @@ class SupervisorService:
                 "job_id": job_id,
                 "task_id": task_id,
                 "progress": f"{job.progress:.1f}%",
-                "feedback": feedback
+                "supervisor_message": supervisor_message,
+                "next_task": next_task_title
             }
             
         except ValueError as e:
@@ -269,6 +284,69 @@ class SupervisorService:
             logger.error(f"Failed to prune job {job_id}: {e}")
             return {"error": f"Failed to prune job: {str(e)}"}
     
+    def get_all_jobs(self) -> Dict:
+        """Get comprehensive list of all jobs with their current status."""
+        try:
+            jobs = self.storage.get_all_jobs()
+            
+            job_summaries = []
+            for job in jobs:
+                job_summaries.append({
+                    "job_id": job.id,
+                    "title": job.title,
+                    "description": job.description,
+                    "agent_id": job.agent_id,
+                    "progress": f"{job.progress:.1f}%",
+                    "task_count": len(job.tasks),
+                    "completed_tasks": len([t for t in job.tasks if t.status == TaskStatus.COMPLETED]),
+                    "is_completed": job.is_completed,
+                    "created_at": job.created_at.isoformat(),
+                    "updated_at": job.updated_at.isoformat()
+                })
+            
+            return {
+                "jobs": job_summaries,
+                "total_jobs": len(jobs),
+                "message": f"Retrieved {len(jobs)} jobs successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get all jobs: {e}")
+            return {"error": f"Failed to retrieve jobs: {str(e)}"}
+    
+    def get_job_tasks(self, job_id: str) -> Dict:
+        """Get detailed task information for a specific job."""
+        try:
+            job = self.storage.get_job(job_id)
+            if not job:
+                return {"error": "Job not found"}
+            
+            task_details = []
+            for task in job.tasks:
+                task_details.append({
+                    "task_id": task.id,
+                    "title": task.title,
+                    "description": task.description,
+                    "status": task.status.value,
+                    "priority": task.priority.value,
+                    "estimated_minutes": task.estimated_minutes,
+                    "created_at": task.created_at.isoformat(),
+                    "updated_at": task.updated_at.isoformat()
+                })
+            
+            return {
+                "job_id": job_id,
+                "job_title": job.title,
+                "tasks": task_details,
+                "progress": f"{job.progress:.1f}%",
+                "total_tasks": len(job.tasks),
+                "message": f"Retrieved {len(job.tasks)} tasks for job '{job.title}'"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get job tasks: {e}")
+            return {"error": f"Failed to retrieve job tasks: {str(e)}"}
+    
     def analyze_problem(self, description: str, context: str, severity: str) -> Dict:
         """Analyze a problem and provide solutions using structured LLM output."""
         system_prompt = """You are an expert supervisor helping analyze and solve problems. 
@@ -310,10 +388,10 @@ class SupervisorService:
             logger.error(f"Problem analysis failed: {e}")
             raise
     
-    def generate_task_feedback(self, job_title: str, task_title: str, status: str, details: str) -> Dict:
-        """Generate feedback for task updates using structured LLM."""
-        system_prompt = "You are a helpful supervisor providing feedback on task progress. Be encouraging but constructive."
-        user_prompt = f"Job: {job_title}\nTask: {task_title} (Status: {status})\nDetails: {details}\n\nProvide brief, encouraging feedback and next steps."
+    def _generate_simple_feedback(self, task_title: str, details: str) -> Dict:
+        """Generate simple feedback for in-progress tasks using LLM."""
+        system_prompt = "You are a helpful supervisor providing brief guidance on task progress. Keep responses concise and encouraging."
+        user_prompt = f"Task: {task_title}\nProgress details: {details}\n\nProvide brief guidance or encouragement (1-2 sentences max)."
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -321,24 +399,25 @@ class SupervisorService:
         ]
         
         try:
-            # Use structured outputs for consistent feedback format
+            # Use structured outputs for consistent simple feedback
             feedback = self.llm_client.structured_completion(
                 messages=messages, 
-                response_model=TaskFeedbackResponse,
-                max_tokens=400, 
+                response_model=SimpleFeedbackResponse,
+                max_tokens=150, 
                 temperature=0.6
             )
             
             return {
-                "message": feedback.message,
-                "suggestions": feedback.suggestions,
-                "celebration_worthy": feedback.celebration_worthy,
-                "potential_blockers": feedback.potential_blockers,
-                "ai_powered": True
+                "supervisor_message": feedback.supervisor_message,
+                "next_task": feedback.next_task
             }
         except Exception as e:
-            logger.error(f"Feedback generation failed: {e}")
-            raise
+            logger.error(f"Simple feedback generation failed: {e}")
+            # Fallback to static message if LLM fails
+            return {
+                "supervisor_message": "Good progress! Keep it up and update me when you have more to share.",
+                "next_task": None
+            }
     
     def breakdown_job(self, description: str) -> List[Dict]:
         """Break down a job into tasks using structured LLM outputs.

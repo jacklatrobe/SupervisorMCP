@@ -116,9 +116,7 @@ class ProblemAnalysisResponse(BaseModel):
     requires_escalation: bool = Field(..., description="Whether problem needs escalation")
 
 
-class TaskFeedbackResponse(BaseModel):
-    """Schema for LLM task feedback response."""
-    message: str = Field(..., description="Encouraging feedback message")
-    suggestions: List[str] = Field(..., max_items=3, description="Helpful suggestions for next steps")
-    celebration_worthy: bool = Field(..., description="Whether this progress deserves celebration")
-    potential_blockers: List[str] = Field(default_factory=list, max_items=2, description="Potential issues to watch for")
+class SimpleFeedbackResponse(BaseModel):
+    """Simplified schema for task feedback - only used for in-progress updates."""
+    supervisor_message: str = Field(..., description="Brief guidance message from supervisor")
+    next_task: Optional[str] = Field(default=None, description="Title of next task if available")
