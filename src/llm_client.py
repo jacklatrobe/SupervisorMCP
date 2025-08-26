@@ -24,7 +24,7 @@ class SupervisorLLMClient:
             api_key: OpenAI API key, uses OPENAI_API_KEY env var if not provided
         """
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-        self.model = "gpt-4o-2024-08-06"  # Model that supports structured outputs
+        self.model = "gpt-5-mini"  # Model that supports structured outputs
         logger.info("SupervisorLLM client initialized with structured outputs support")
     
     def chat_completion(self, messages: List[Dict], max_tokens: int = 500, temperature: float = 0.7) -> str:

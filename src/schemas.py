@@ -103,6 +103,7 @@ class ProblemAnalysisTask(BaseModel):
     focus: str = Field(..., description="Specific focus area for analysis")
     context: str = Field(..., description="Context information for the analysis")
     observation: str = Field(..., description="Observation or finding from the analysis")
+    confidence: int = Field(..., ge=0, le=100, description="Confidence score (0-100) for this analysis")
 
 
 class Solution(BaseModel):

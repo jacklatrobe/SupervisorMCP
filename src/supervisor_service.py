@@ -367,7 +367,8 @@ class SupervisorService:
                 analysis_tasks.append(ProblemAnalysisTask(
                     focus=focus[:100] + "..." if len(focus) > 100 else focus,
                     context="Analysis failed due to error",
-                    observation=f"Error occurred: {str(e)}"
+                    observation=f"Error occurred: {str(e)}",
+                    confidence=0  # Set low confidence for error cases
                 ))
         
         # Reduce phase: Aggregate and synthesize findings
@@ -397,28 +398,44 @@ class SupervisorService:
         )
         
         try:
-            # Get a simple text response for the observation
-            response = self.llm_client.chat_completion(
+            # Use structured outputs to get both observation and confidence score
+            analysis_task = self.llm_client.structured_completion(
                 messages=messages,
-                max_tokens=300,
+                response_model=ProblemAnalysisTask,
+                max_tokens=350,
                 temperature=0.4
             )
             
-            return ProblemAnalysisTask(
-                focus=focus,
-                context=f"Problem: {problem_input.problem_description}",
-                observation=response.strip()
-            )
+            # Ensure the focus and context are set correctly (LLM might not fill these properly)
+            analysis_task.focus = focus
+            analysis_task.context = f"Problem: {problem_input.problem_description}"
+            
+            return analysis_task
         except Exception as e:
             logger.error(f"Failed to analyze focus '{focus[:50]}...': {e}")
             raise
     
     def _synthesize_analysis_results(self, problem_input: ProblemInput, analysis_tasks: List[ProblemAnalysisTask]) -> Dict:
         """Synthesize the results from all analysis tasks into final recommendations."""
-        # Prepare the synthesis input
+        
+        # Filter out low-confidence analyses (below 65)
+        high_confidence_tasks = [task for task in analysis_tasks if task.confidence >= 65]
+        
+        # If no high-confidence analyses, log and use all (to avoid empty synthesis)
+        if not high_confidence_tasks:
+            logger.warning("No high-confidence analyses found, using all analyses")
+            filtered_tasks = analysis_tasks
+        else:
+            filtered_tasks = high_confidence_tasks
+            logger.info(f"Using {len(filtered_tasks)} high-confidence analyses out of {len(analysis_tasks)} total")
+        
+        # Sort by confidence (highest first) for synthesis prioritization
+        sorted_tasks = sorted(filtered_tasks, key=lambda task: task.confidence, reverse=True)
+        
+        # Prepare the synthesis input with confidence-ordered analyses
         analyses_text = "\n\n".join([
-            f"Focus: {task.focus}\nObservation: {task.observation}"
-            for task in analysis_tasks
+            f"Focus: {task.focus}\nConfidence: {task.confidence}%\nObservation: {task.observation}"
+            for task in sorted_tasks
         ])
         
         # Use centralized prompt builder
@@ -449,10 +466,13 @@ class SupervisorService:
                 "analysis_tasks": [
                     {
                         "focus": task.focus,
-                        "observation": task.observation
+                        "observation": task.observation,
+                        "confidence": task.confidence
                     }
-                    for task in analysis_tasks
+                    for task in sorted_tasks  # Return the sorted, filtered tasks
                 ],
+                "filtered_count": len(sorted_tasks),
+                "total_analyses": len(analysis_tasks),
                 "ai_powered": True
             }
         except Exception as e:
