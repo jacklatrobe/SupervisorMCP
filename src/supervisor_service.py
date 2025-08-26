@@ -228,22 +228,29 @@ class SupervisorService:
             logger.error(f"Failed to update task: {e}")
             return {"error": f"Failed to update task: {str(e)}"}
     
-    def report_problem(self, job_id: str, problem_input: ProblemInput) -> Dict:
+    def report_problem(self, job_id: Optional[str], problem_input: ProblemInput) -> Dict:
         """Report and analyze a problem with LLM intelligence using map-reduce approach."""
         try:
-            job = self.storage.get_job(job_id)
-            if not job:
-                return {"error": "Job not found"}
+            job = None
+            if job_id:
+                job = self.storage.get_job(job_id)
+                if not job:
+                    return {"error": "Job not found"}
             
-            # Use map-reduce approach for problem analysis
+            # Use map-reduce approach for problem analysis (with or without job context)
             solution = self.analyze_problem_with_map_reduce(problem_input, job)
             
-            logger.info(f"Analyzed problem for job {job_id}")
+            logger.info(f"Analyzed problem{' for job ' + job_id if job_id else ' without job context'}")
             
-            return {
-                "job_id": job_id,
+            result = {
                 "problem_analysis": solution
             }
+            
+            # Only include job_id in response if it was provided
+            if job_id:
+                result["job_id"] = job_id
+                
+            return result
             
         except Exception as e:
             logger.error(f"Failed to analyze problem: {e}")
@@ -347,7 +354,7 @@ class SupervisorService:
             logger.error(f"Failed to get job tasks: {e}")
             return {"error": f"Failed to retrieve job tasks: {str(e)}"}
     
-    def analyze_problem_with_map_reduce(self, problem_input: ProblemInput, job: Job) -> Dict:
+    def analyze_problem_with_map_reduce(self, problem_input: ProblemInput, job: Optional[Job]) -> Dict:
         """Analyze a problem using map-reduce approach with three parallel analysis tasks."""
         
         # Map phase: Run three parallel analyses using centralized focuses
@@ -368,16 +375,20 @@ class SupervisorService:
         # Reduce phase: Aggregate and synthesize findings
         return self._synthesize_analysis_results(problem_input, analysis_tasks)
     
-    def _analyze_single_focus(self, problem_input: ProblemInput, focus: str, job: Job) -> ProblemAnalysisTask:
+    def _analyze_single_focus(self, problem_input: ProblemInput, focus: str, job: Optional[Job]) -> ProblemAnalysisTask:
         """Analyze the problem from a single focus perspective."""
-        # Prepare context about recent tasks
+        # Prepare context about recent tasks (if job is available)
         recent_tasks_context = ""
-        if job.tasks:
+        if job and job.tasks:
             recent_tasks = job.tasks[-5:]  # Last 5 tasks for context
             recent_tasks_context = "Recent tasks:\n" + "\n".join([
                 f"- {task.title} ({task.status.value}): {task.description}"
                 for task in recent_tasks
             ])
+        elif job:
+            recent_tasks_context = "No tasks available in this job yet."
+        else:
+            recent_tasks_context = "No job context available - analyzing problem independently."
         
         # Use centralized prompt builder
         messages = prompts.build_single_focus_analysis_messages(

@@ -70,30 +70,17 @@ def complete_task(job_id: str, task_id: str, completion_notes: str = "") -> dict
 
 
 @mcp.tool()
-def report_problem(job_id: str, problem_description: str, context: str) -> dict:
+def report_problem(problem_description: str, steps_taken: list, job_id: str = None) -> dict:
     """Report a problem and receive intelligent troubleshooting advice.
     
     Args:
-        job_id: Unique identifier for the job where problem occurred
-        problem_description: Detailed description of the problem
-        context: Additional context about when/how the problem occurred
+        problem_description: Detailed description of the original task you were trying to solve, and the problem you are facing.
+        steps_taken: List of steps taken, commands run, or tools called so far to address the problem
+        job_id: Optional unique identifier for the job where problem occurred (provides additional context if available)
     
     Returns:
         Dictionary containing problem analysis and actionable solutions
     """
-    # Parse context to extract steps_taken if it's structured
-    steps_taken = []
-    if context:
-        # Try to parse context as steps, otherwise treat as single context item
-        try:
-            # If context contains line breaks, treat each line as a step
-            if '\n' in context:
-                steps_taken = [step.strip() for step in context.split('\n') if step.strip()]
-            else:
-                steps_taken = [context]
-        except:
-            steps_taken = [context]
-    
     problem_input = ProblemInput(
         problem_description=problem_description,
         steps_taken=steps_taken

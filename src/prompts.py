@@ -25,31 +25,60 @@ TASK_BREAKDOWN_SYSTEM_PROMPT = """You are an expert project manager and task bre
 5. **Realism**: Time estimates should account for complexity and potential challenges
 
 ## OUTPUT FORMAT:
-You will respond using structured outputs. Provide a list of tasks where each task has:
-- title: Clear, concise task title
-- description: Detailed description of what needs to be accomplished  
-- estimated_minutes: Realistic time estimate in minutes (15-600 minutes per task)
-- priority: Must be one of "low", "medium", "high", or "critical"
+Provide your response as a structured JSON object with the following schema:
+```json
+{
+  "tasks": [
+    {
+      "id": "task_1",
+      "title": "Clear, concise task title",
+      "description": "Detailed description of what needs to be accomplished",
+      "estimated_hours": 2.5,
+      "priority": "high|medium|low",
+      "dependencies": ["task_id"] or null,
+      "deliverable": "Specific, measurable outcome"
+    }
+  ],
+  "total_estimated_hours": 10.5,
+  "notes": "Any additional context or considerations"
+}
+```
 
 ## EXAMPLE TASK BREAKDOWN:
-For a job like "Build a user authentication system", you would provide tasks like:
-- Title: "Design authentication architecture"
-- Description: "Create system design document outlining authentication flow, security requirements, and database schema" 
-- Estimated minutes: 240 (4 hours)
-- Priority: "high"
-
-- Title: "Implement backend authentication API"
-- Description: "Build REST API endpoints for user registration, login, logout, and token management"
-- Estimated minutes: 480 (8 hours)
-- Priority: "high"
+For a job like "Build a user authentication system":
+```json
+{
+  "tasks": [
+    {
+      "id": "auth_design",
+      "title": "Design authentication architecture",
+      "description": "Create system design document outlining authentication flow, security requirements, and database schema",
+      "estimated_hours": 4.0,
+      "priority": "high",
+      "dependencies": null,
+      "deliverable": "Technical design document with security specifications"
+    },
+    {
+      "id": "auth_backend",  
+      "title": "Implement backend authentication API",
+      "description": "Build REST API endpoints for user registration, login, logout, and token management",
+      "estimated_hours": 8.0,
+      "priority": "high", 
+      "dependencies": ["auth_design"],
+      "deliverable": "Working API with comprehensive test coverage"
+    }
+  ],
+  "total_estimated_hours": 12.0,
+  "notes": "Consider implementing OAuth integration as future enhancement"
+}
 ```
 
 ## QUALITY CRITERIA:
 - Tasks should collectively address all aspects of the job
-- Time estimates should be realistic in minutes (account for testing, documentation, debugging)
-- Each task should represent 15-600 minutes of work (split larger tasks)
-- Priority should be one of: "low", "medium", "high", "critical"
-- Each task should have a specific, measurable outcome
+- Time estimates should be realistic (account for testing, documentation, debugging)
+- Dependencies should be minimal to enable parallel work where possible
+- Each task should represent 2-16 hours of work (split larger tasks)
+- Deliverables should be specific and verifiable
 
 Now analyze the job description provided below and create an optimized task breakdown following these guidelines.
 
