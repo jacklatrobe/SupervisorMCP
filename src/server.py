@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict
 
 from mcp.server.fastmcp import FastMCP
-from schemas import TaskStatus
+from schemas import TaskStatus, ProblemInput
 from supervisor_service import create_supervisor_service
 
 # Configure logging for MCP server (stderr only, never stdout)
@@ -70,19 +70,36 @@ def complete_task(job_id: str, task_id: str, completion_notes: str = "") -> dict
 
 
 @mcp.tool()
-def report_problem(job_id: str, problem_description: str, context: str, severity: str = "medium") -> dict:
+def report_problem(job_id: str, problem_description: str, context: str) -> dict:
     """Report a problem and receive intelligent troubleshooting advice.
     
     Args:
         job_id: Unique identifier for the job where problem occurred
         problem_description: Detailed description of the problem
         context: Additional context about when/how the problem occurred
-        severity: Problem severity level (low, medium, high, critical)
     
     Returns:
         Dictionary containing problem analysis and actionable solutions
     """
-    return supervisor_service.report_problem(job_id, problem_description, context, severity)
+    # Parse context to extract steps_taken if it's structured
+    steps_taken = []
+    if context:
+        # Try to parse context as steps, otherwise treat as single context item
+        try:
+            # If context contains line breaks, treat each line as a step
+            if '\n' in context:
+                steps_taken = [step.strip() for step in context.split('\n') if step.strip()]
+            else:
+                steps_taken = [context]
+        except:
+            steps_taken = [context]
+    
+    problem_input = ProblemInput(
+        problem_description=problem_description,
+        steps_taken=steps_taken
+    )
+    
+    return supervisor_service.report_problem(job_id, problem_input)
 
 
 @mcp.tool()

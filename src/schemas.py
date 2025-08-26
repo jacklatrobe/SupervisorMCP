@@ -80,14 +80,6 @@ class Job(BaseModel):
 # Structured Output Schemas for LLM Responses
 # Following Clean Code principles with clear, focused schemas
 
-class RiskLevel(str, Enum):
-    """Risk level enumeration for problem analysis."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
 class TaskBreakdownItem(BaseModel):
     """Schema for individual task in LLM breakdown response."""
     title: str = Field(..., description="Clear, concise task title")
@@ -101,19 +93,29 @@ class TaskBreakdownResponse(BaseModel):
     tasks: List[TaskBreakdownItem] = Field(..., min_items=1, max_items=10, description="List of actionable tasks")
 
 
+class ProblemInput(BaseModel):
+    """Schema for problem input data."""
+    problem_description: str = Field(..., description="Description of the problem")
+    steps_taken: List[str] = Field(..., description="List of steps taken so far")
+
+
+class ProblemAnalysisTask(BaseModel):
+    """Schema for individual problem analysis task."""
+    focus: str = Field(..., description="Specific focus area for analysis")
+    context: str = Field(..., description="Context information for the analysis")
+    observation: str = Field(..., description="Observation or finding from the analysis")
+
+
 class Solution(BaseModel):
     """Schema for individual problem solution."""
     title: str = Field(..., description="Brief solution title")
     description: str = Field(..., description="Detailed solution steps")
-    estimated_time_minutes: int = Field(..., ge=5, le=480, description="Time to implement solution")
 
 
-class ProblemAnalysisResponse(BaseModel):
-    """Schema for LLM problem analysis response."""
+class SimpleProblemAnalysis(BaseModel):
+    """Simplified schema for problem analysis results."""
     analysis_summary: str = Field(..., description="Brief analysis of the problem")
     solutions: List[Solution] = Field(..., min_items=1, max_items=5, description="Actionable solutions")
-    risk_level: RiskLevel = Field(..., description="Risk assessment level")
-    requires_escalation: bool = Field(..., description="Whether problem needs escalation")
 
 
 class SimpleFeedbackResponse(BaseModel):

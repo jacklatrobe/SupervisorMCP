@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Protocol
 
 from schemas import (
-    Job, Task, TaskStatus, Priority, RiskLevel,
-    TaskBreakdownResponse, ProblemAnalysisResponse, SimpleFeedbackResponse
+    Job, Task, TaskStatus, Priority,
+    TaskBreakdownResponse, SimpleProblemAnalysis, SimpleFeedbackResponse,
+    ProblemInput, ProblemAnalysisTask
 )
 
 logger = logging.getLogger(__name__)
@@ -228,15 +229,15 @@ class SupervisorService:
             logger.error(f"Failed to update task: {e}")
             return {"error": f"Failed to update task: {str(e)}"}
     
-    def report_problem(self, job_id: str, problem_description: str, context: str, severity: str = "medium") -> Dict:
-        """Report and analyze a problem with LLM intelligence."""
+    def report_problem(self, job_id: str, problem_input: ProblemInput) -> Dict:
+        """Report and analyze a problem with LLM intelligence using map-reduce approach."""
         try:
             job = self.storage.get_job(job_id)
             if not job:
                 return {"error": "Job not found"}
             
-            # Use LLM for problem analysis
-            solution = self.analyze_problem(problem_description, context, severity)
+            # Use map-reduce approach for problem analysis
+            solution = self.analyze_problem_with_map_reduce(problem_input, job)
             
             logger.info(f"Analyzed problem for job {job_id}")
             
@@ -347,13 +348,60 @@ class SupervisorService:
             logger.error(f"Failed to get job tasks: {e}")
             return {"error": f"Failed to retrieve job tasks: {str(e)}"}
     
-    def analyze_problem(self, description: str, context: str, severity: str) -> Dict:
-        """Analyze a problem and provide solutions using structured LLM output."""
-        system_prompt = """You are an expert supervisor helping analyze and solve problems. 
-        Provide practical, actionable solutions with clear risk assessment.
-        Focus on solutions that can be implemented quickly and effectively."""
+    def analyze_problem_with_map_reduce(self, problem_input: ProblemInput, job: Job) -> Dict:
+        """Analyze a problem using map-reduce approach with three parallel analysis tasks."""
         
-        user_prompt = f"Problem: {description}\nContext: {context}\nSeverity: {severity}\n\nAnalyze this problem and provide specific, actionable solutions."
+        # Define the three analysis focuses
+        analysis_focuses = [
+            "Is the agent looping, repeating tasks, or stuck trying to execute a tool or command?",
+            "Does the recent tasks executed seem to match the outcome the agent says it is trying to achieve?",
+            "Can you see any obvious suggestions, out of box thinking, or low hanging fruit, that might help the agent solve this problem more simply?"
+        ]
+        
+        # Map phase: Run three parallel analyses
+        analysis_tasks = []
+        for focus in analysis_focuses:
+            try:
+                task = self._analyze_single_focus(problem_input, focus, job)
+                analysis_tasks.append(task)
+            except Exception as e:
+                logger.error(f"Failed analysis for focus '{focus}': {e}")
+                # Continue with other analyses even if one fails
+                analysis_tasks.append(ProblemAnalysisTask(
+                    focus=focus,
+                    context="Analysis failed due to error",
+                    observation=f"Error occurred: {str(e)}"
+                ))
+        
+        # Reduce phase: Aggregate and synthesize findings
+        return self._synthesize_analysis_results(problem_input, analysis_tasks)
+    
+    def _analyze_single_focus(self, problem_input: ProblemInput, focus: str, job: Job) -> ProblemAnalysisTask:
+        """Analyze the problem from a single focus perspective."""
+        system_prompt = f"""You are an expert supervisor analyzing a specific aspect of an agent's problem.
+        Focus specifically on: {focus}
+        
+        Provide a clear, concise observation based on the steps taken and the problem description."""
+        
+        # Prepare context about recent tasks
+        recent_tasks_context = ""
+        if job.tasks:
+            recent_tasks = job.tasks[-5:]  # Last 5 tasks for context
+            recent_tasks_context = "Recent tasks:\n" + "\n".join([
+                f"- {task.title} ({task.status.value}): {task.description}"
+                for task in recent_tasks
+            ])
+        
+        user_prompt = f"""Problem Description: {problem_input.problem_description}
+        
+Steps Taken:
+{chr(10).join([f"- {step}" for step in problem_input.steps_taken])}
+
+{recent_tasks_context}
+
+Based on the focus area: {focus}
+
+Analyze this situation and provide your observation."""
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -361,10 +409,54 @@ class SupervisorService:
         ]
         
         try:
-            # Use structured outputs for reliable problem analysis
+            # Get a simple text response for the observation
+            response = self.llm_client.chat_completion(
+                messages=messages,
+                max_tokens=300,
+                temperature=0.4
+            )
+            
+            return ProblemAnalysisTask(
+                focus=focus,
+                context=f"Problem: {problem_input.problem_description}",
+                observation=response.strip()
+            )
+        except Exception as e:
+            logger.error(f"Failed to analyze focus '{focus}': {e}")
+            raise
+    
+    def _synthesize_analysis_results(self, problem_input: ProblemInput, analysis_tasks: List[ProblemAnalysisTask]) -> Dict:
+        """Synthesize the results from all analysis tasks into final recommendations."""
+        system_prompt = """You are an expert supervisor synthesizing multiple analysis perspectives.
+        Based on the three different analysis focuses, provide a comprehensive problem analysis
+        with practical, actionable solutions. Focus on solutions that can be implemented quickly and effectively."""
+        
+        # Prepare the synthesis input
+        analyses_text = "\n\n".join([
+            f"Focus: {task.focus}\nObservation: {task.observation}"
+            for task in analysis_tasks
+        ])
+        
+        user_prompt = f"""Problem: {problem_input.problem_description}
+
+Steps Taken:
+{chr(10).join([f"- {step}" for step in problem_input.steps_taken])}
+
+Analysis Results:
+{analyses_text}
+
+Based on these three analysis perspectives, provide a comprehensive analysis and specific, actionable solutions."""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            # Use structured outputs for reliable final analysis
             analysis = self.llm_client.structured_completion(
                 messages=messages, 
-                response_model=ProblemAnalysisResponse,
+                response_model=SimpleProblemAnalysis,
                 max_tokens=700,
                 temperature=0.4
             )
@@ -374,20 +466,22 @@ class SupervisorService:
                 "solutions": [
                     {
                         "title": sol.title,
-                        "description": sol.description,
-                        "estimated_time": sol.estimated_time_minutes
+                        "description": sol.description
                     }
                     for sol in analysis.solutions
                 ],
-                "risk_level": analysis.risk_level.value,
-                "requires_escalation": analysis.requires_escalation,
-                "estimated_time": self._estimate_time(severity),
-                "ai_powered": True
+                "analysis_tasks": [
+                    {
+                        "focus": task.focus,
+                        "observation": task.observation
+                    }
+                    for task in analysis_tasks
+                ]
             }
         except Exception as e:
-            logger.error(f"Problem analysis failed: {e}")
+            logger.error(f"Problem synthesis failed: {e}")
             raise
-    
+
     def _generate_simple_feedback(self, task_title: str, details: str) -> Dict:
         """Generate simple feedback for in-progress tasks using LLM."""
         system_prompt = "You are a helpful supervisor providing brief guidance on task progress. Keep responses concise and encouraging."
@@ -491,16 +585,6 @@ class SupervisorService:
             )
             tasks.append(task)
         return tasks
-    
-    def _estimate_time(self, severity: str) -> int:
-        """Estimate resolution time based on severity."""
-        time_mapping = {
-            "low": 30,
-            "medium": 60, 
-            "high": 120,
-            "critical": 240
-        }
-        return time_mapping.get(severity.lower(), 60)
 
 
 # Initialize services following dependency injection pattern
