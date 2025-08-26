@@ -85,22 +85,6 @@ PROBLEM_ANALYSIS_FOCUSES = [
     
     ## OUTPUT: Provide specific simplification recommendation OR confirm "Current approach optimal"."""
 ]
-    Identify potentially overlooked assets:
-    - **Existing Tools**: Are there available tools not being utilized effectively?
-    - **Domain Knowledge**: Is there established expertise or documentation being ignored?
-    - **Patterns/Templates**: Are there proven approaches that could be adapted?
-    - **Shortcuts**: Are there legitimate ways to skip unnecessary steps?
-    
-    ### STEP 4: MINIMUM VIABLE SOLUTION ANALYSIS
-    Apply optimization heuristics:
-    - **Build vs. Buy**: Could existing solutions be adapted rather than building from scratch?
-    - **Standard Patterns**: Are there established frameworks that apply to this problem type?
-    - **Decomposition Benefits**: Would breaking into smaller pieces reveal easier solution paths?
-    - **Occam's Razor**: Are obvious simple solutions being overlooked due to overthinking?
-    
-    ## OUTPUT REQUIREMENT:
-    Conclude with ONE actionable finding: either a specific simplification recommendation with clear implementation guidance, or confirmation that "Current approach appears optimally designed for the problem scope"."""
-]
 
 SINGLE_FOCUS_ANALYSIS_SYSTEM_PROMPT_TEMPLATE = """You are a senior technical supervisor specializing in systematic problem analysis.
 
@@ -116,9 +100,6 @@ SINGLE_FOCUS_ANALYSIS_SYSTEM_PROMPT_TEMPLATE = """You are a senior technical sup
 - Provide actionable insights
 - Be specific about recommendations
 
-## ANALYSIS FOCUS:
-{focus}
-
 ## OUTPUT STRUCTURE:
 - **focus**: (set automatically)
 - **context**: (set automatically)
@@ -131,6 +112,9 @@ SINGLE_FOCUS_ANALYSIS_SYSTEM_PROMPT_TEMPLATE = """You are a senior technical sup
 - 50-69: Moderate evidence, somewhat relevant, general recommendations
 - 30-49: Limited evidence, marginally relevant, vague insights
 - 0-29: Poor evidence, irrelevant, no clear findings
+
+## ANALYSIS FOCUS:
+{focus}
 
 <PROBLEM_CONTEXT>
 Problem Description: {problem_description}
@@ -157,20 +141,11 @@ PROBLEM_SYNTHESIS_SYSTEM_PROMPT = """You are a senior executive consultant speci
 
 ## OUTPUT STRUCTURE:
 
-**EXECUTIVE SUMMARY:** [2-3 sentence overview]
+**KEY INSIGHTS:** [One paragraph - Primary insights from analyses]
 
-**KEY INSIGHTS:** [Primary insights from analyses]
+**ROOT CAUSE:** [One sentence - Primary underlying cause]
 
-**ROOT CAUSE:** [Primary underlying cause]
-
-**RECOMMENDED ACTIONS:**
-1. **Immediate (1-2 hours):** [Most urgent action]
-2. **Short-term (1-2 days):** [Important follow-ups]  
-3. **Medium-term (1 week):** [Strategic improvements]
-
-**SUCCESS METRICS:** [How to measure progress]
-
-**RISK MITIGATION:** [Key risks and how to address]
+**RECOMMENDED ACTIONS:** [Bullet list - Specific, prioritized actions with brief rationale]
 
 <SYNTHESIS_INPUT>
 Problem Description: {problem_description}
