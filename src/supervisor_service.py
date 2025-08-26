@@ -13,6 +13,8 @@ from schemas import (
     ProblemInput, ProblemAnalysisTask
 )
 
+import prompts
+
 logger = logging.getLogger(__name__)
 
 # Constants following clean code practices
@@ -192,15 +194,12 @@ class SupervisorService:
             next_task_title = next_task.title if next_task else None
             
             if task_status == TaskStatus.COMPLETED:
-                # Simple static message for completed tasks
-                if next_task:
-                    supervisor_message = f"Task completed successfully! Moving on to the next task."
-                else:
-                    supervisor_message = "All tasks completed! Great job!"
+                # Use centralized completion messages
+                supervisor_message = prompts.get_task_completion_message(next_task is not None)
                     
             elif task_status == TaskStatus.IN_PROGRESS and old_status == TaskStatus.PENDING:
                 # Simple acknowledgment for newly started tasks
-                supervisor_message = "Task acknowledged. Good luck! Update me when it's complete."
+                supervisor_message = prompts.TASK_STARTED_ACKNOWLEDGMENT
                 
             elif task_status == TaskStatus.IN_PROGRESS:
                 # Use LLM for in-progress updates only
@@ -208,10 +207,10 @@ class SupervisorService:
                 supervisor_message = feedback["supervisor_message"]
                 
             elif task_status == TaskStatus.FAILED:
-                supervisor_message = "Task marked as failed. Consider reporting the problem to the supervisor for analysis."
+                supervisor_message = prompts.TASK_FAILED_MESSAGE
                 
             else:
-                supervisor_message = "Task status updated."
+                supervisor_message = prompts.TASK_UPDATED_GENERIC
             
             logger.info(f"Updated task {task_id} from {old_status} to {task_status}")
             
@@ -351,24 +350,17 @@ class SupervisorService:
     def analyze_problem_with_map_reduce(self, problem_input: ProblemInput, job: Job) -> Dict:
         """Analyze a problem using map-reduce approach with three parallel analysis tasks."""
         
-        # Define the three analysis focuses
-        analysis_focuses = [
-            "Is the agent looping, repeating tasks, or stuck trying to execute a tool or command?",
-            "Does the recent tasks executed seem to match the outcome the agent says it is trying to achieve?",
-            "Can you see any obvious suggestions, out of box thinking, or low hanging fruit, that might help the agent solve this problem more simply?"
-        ]
-        
-        # Map phase: Run three parallel analyses
+        # Map phase: Run three parallel analyses using centralized focuses
         analysis_tasks = []
-        for focus in analysis_focuses:
+        for focus in prompts.PROBLEM_ANALYSIS_FOCUSES:
             try:
                 task = self._analyze_single_focus(problem_input, focus, job)
                 analysis_tasks.append(task)
             except Exception as e:
-                logger.error(f"Failed analysis for focus '{focus}': {e}")
+                logger.error(f"Failed analysis for focus '{focus[:50]}...': {e}")
                 # Continue with other analyses even if one fails
                 analysis_tasks.append(ProblemAnalysisTask(
-                    focus=focus,
+                    focus=focus[:100] + "..." if len(focus) > 100 else focus,
                     context="Analysis failed due to error",
                     observation=f"Error occurred: {str(e)}"
                 ))
@@ -378,11 +370,6 @@ class SupervisorService:
     
     def _analyze_single_focus(self, problem_input: ProblemInput, focus: str, job: Job) -> ProblemAnalysisTask:
         """Analyze the problem from a single focus perspective."""
-        system_prompt = f"""You are an expert supervisor analyzing a specific aspect of an agent's problem.
-        Focus specifically on: {focus}
-        
-        Provide a clear, concise observation based on the steps taken and the problem description."""
-        
         # Prepare context about recent tasks
         recent_tasks_context = ""
         if job.tasks:
@@ -392,21 +379,13 @@ class SupervisorService:
                 for task in recent_tasks
             ])
         
-        user_prompt = f"""Problem Description: {problem_input.problem_description}
-        
-Steps Taken:
-{chr(10).join([f"- {step}" for step in problem_input.steps_taken])}
-
-{recent_tasks_context}
-
-Based on the focus area: {focus}
-
-Analyze this situation and provide your observation."""
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        # Use centralized prompt builder
+        messages = prompts.build_single_focus_analysis_messages(
+            problem_input.problem_description,
+            problem_input.steps_taken,
+            focus,
+            recent_tasks_context
+        )
         
         try:
             # Get a simple text response for the observation
@@ -422,35 +401,23 @@ Analyze this situation and provide your observation."""
                 observation=response.strip()
             )
         except Exception as e:
-            logger.error(f"Failed to analyze focus '{focus}': {e}")
+            logger.error(f"Failed to analyze focus '{focus[:50]}...': {e}")
             raise
     
     def _synthesize_analysis_results(self, problem_input: ProblemInput, analysis_tasks: List[ProblemAnalysisTask]) -> Dict:
         """Synthesize the results from all analysis tasks into final recommendations."""
-        system_prompt = """You are an expert supervisor synthesizing multiple analysis perspectives.
-        Based on the three different analysis focuses, provide a comprehensive problem analysis
-        with practical, actionable solutions. Focus on solutions that can be implemented quickly and effectively."""
-        
         # Prepare the synthesis input
         analyses_text = "\n\n".join([
             f"Focus: {task.focus}\nObservation: {task.observation}"
             for task in analysis_tasks
         ])
         
-        user_prompt = f"""Problem: {problem_input.problem_description}
-
-Steps Taken:
-{chr(10).join([f"- {step}" for step in problem_input.steps_taken])}
-
-Analysis Results:
-{analyses_text}
-
-Based on these three analysis perspectives, provide a comprehensive analysis and specific, actionable solutions."""
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        # Use centralized prompt builder
+        messages = prompts.build_problem_synthesis_messages(
+            problem_input.problem_description,
+            problem_input.steps_taken,
+            analyses_text
+        )
         
         try:
             # Use structured outputs for reliable final analysis
@@ -476,7 +443,8 @@ Based on these three analysis perspectives, provide a comprehensive analysis and
                         "observation": task.observation
                     }
                     for task in analysis_tasks
-                ]
+                ],
+                "ai_powered": True
             }
         except Exception as e:
             logger.error(f"Problem synthesis failed: {e}")
@@ -484,13 +452,8 @@ Based on these three analysis perspectives, provide a comprehensive analysis and
 
     def _generate_simple_feedback(self, task_title: str, details: str) -> Dict:
         """Generate simple feedback for in-progress tasks using LLM."""
-        system_prompt = "You are a helpful supervisor providing brief guidance on task progress. Keep responses concise and encouraging."
-        user_prompt = f"Task: {task_title}\nProgress details: {details}\n\nProvide brief guidance or encouragement (1-2 sentences max)."
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        # Use centralized prompt builder
+        messages = prompts.build_simple_feedback_messages(task_title, details)
         
         try:
             # Use structured outputs for consistent simple feedback
@@ -507,9 +470,9 @@ Based on these three analysis perspectives, provide a comprehensive analysis and
             }
         except Exception as e:
             logger.error(f"Simple feedback generation failed: {e}")
-            # Fallback to static message if LLM fails
+            # Use centralized fallback message
             return {
-                "supervisor_message": "Good progress! Keep it up and update me when you have more to share.",
+                "supervisor_message": prompts.FEEDBACK_FALLBACK_MESSAGE,
                 "next_task": None
             }
     
@@ -519,16 +482,8 @@ Based on these three analysis perspectives, provide a comprehensive analysis and
         Following Clean Code principles: single responsibility (job breakdown),
         dependency inversion (uses LLM client interface), and eliminating manual parsing.
         """
-        system_prompt = """You are an expert project manager breaking down work into actionable tasks. 
-        Create 3-5 specific, actionable tasks with realistic time estimates.
-        Focus on clear, achievable deliverables that can be completed independently."""
-        
-        user_prompt = f"Break down this job into actionable tasks:\n\n{description}"
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        # Use centralized prompt builder
+        messages = prompts.build_task_breakdown_messages(description)
         
         try:
             # Use structured outputs instead of manual parsing
