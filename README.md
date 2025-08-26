@@ -21,15 +21,22 @@ An MCP server that provides intelligent task management for AI agents using Open
 ## Setup
 
 ```bash
-# Set OpenAI API key
-export OPENAI_API_KEY="your-api-key"
-
 # Docker (recommended)
 docker build -t supervisor-mcp .
-docker run -it supervisor-mcp
+docker run -d -e OPENAI_API_KEY="your-api-key" supervisor-mcp
+```
 
-# Local development
-python src/server.py
+Adding the MCP server:
+```json
+{
+    "servers": {
+        "MCP_SUPERVISOR": {
+            "url": "http://localhost:8000/mcp",
+            "headers": {"Content-Type": "application/json"},
+            "type": "http"
+        }
+    }
+}
 ```
 
 ## Requirements
@@ -40,4 +47,4 @@ python src/server.py
 
 ## Testing
 
-See [test-script.md](./test-script.md) for comprehensive test procedures covering all functionality.
+See [test-script.md](./test-script.md) for comprehensive test procedures covering all functionality - can be run by your coding agent as a "test-suite-lite" for the MCP server during development, or if you want a demonstration of it's capabilities.
