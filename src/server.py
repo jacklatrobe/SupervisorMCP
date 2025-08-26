@@ -24,18 +24,17 @@ supervisor_service = create_supervisor_service()
 mcp = FastMCP("supervisor-mcp", host="0.0.0.0", port=8000)
 # MCP Tools Implementation
 @mcp.tool()
-def start_job(job_description: str, agent_id: str, priority: str = "medium") -> dict:
+def start_job(job_description: str, priority: str = "medium") -> dict:
     """Start a new job with intelligent task breakdown.
     
     Args:
         job_description: Detailed description of the job to be completed
-        agent_id: Identifier for the agent responsible for this job
         priority: Job priority level (low, medium, high, critical)
     
     Returns:
         Dictionary containing job details, tasks, and success message
     """
-    return supervisor_service.create_job(job_description, agent_id, priority)
+    return supervisor_service.create_job(job_description, priority)
 
 
 @mcp.tool()
@@ -105,7 +104,6 @@ def get_all_jobs() -> dict:
                 "job_id": job.id,
                 "title": job.title,
                 "description": job.description,
-                "agent_id": job.agent_id,
                 "progress": f"{job.progress:.1f}%",
                 "is_completed": job.is_completed,
                 "task_count": len(job.tasks),

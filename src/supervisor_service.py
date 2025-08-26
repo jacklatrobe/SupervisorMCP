@@ -131,7 +131,7 @@ class SupervisorService:
         self.storage = storage
         self.llm_client = llm_client
     
-    def create_job(self, description: str, agent_id: str, priority: str = "medium") -> Dict:
+    def create_job(self, description: str, priority: str = "medium") -> Dict:
         """Create a new job with LLM-powered task breakdown."""
         try:
             # Create job with clean title generation
@@ -139,8 +139,7 @@ class SupervisorService:
             job = Job(
                 id=str(uuid.uuid4()),
                 title=title,
-                description=description,
-                agent_id=agent_id
+                description=description
             )
             
             # Generate tasks using LLM
@@ -302,7 +301,6 @@ class SupervisorService:
                     "job_id": job.id,
                     "title": job.title,
                     "description": job.description,
-                    "agent_id": job.agent_id,
                     "progress": f"{job.progress:.1f}%",
                     "task_count": len(job.tasks),
                     "completed_tasks": len([t for t in job.tasks if t.status == TaskStatus.COMPLETED]),

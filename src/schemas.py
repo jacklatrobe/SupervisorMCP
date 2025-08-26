@@ -54,7 +54,6 @@ class Job(BaseModel):
     id: str = Field(..., description="Unique job identifier")
     title: str = Field(..., min_length=1, description="Job title")
     description: str = Field(..., min_length=1, description="Job description")
-    agent_id: str = Field(..., min_length=1, description="Agent responsible for job")
     tasks: List[Task] = Field(default_factory=list, description="Job tasks")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
