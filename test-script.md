@@ -4,8 +4,7 @@ This test script validates the functionality of the SupervisorMCP server. Follow
 
 ## Prerequisites
 - MCP server is running and accessible
-- Agent has MCP client capabilities
-- OpenAI API key is properly configured
+- Agent has MCP supervisor capabilities available
 
 ## Test Suite
 
@@ -13,16 +12,7 @@ This test script validates the functionality of the SupervisorMCP server. Follow
 **Objective**: Verify MCP server is properly initialized and exposes expected capabilities.
 
 **Steps**:
-1. Connect to MCP server using initialize handshake
-2. List available tools using `tools/list`
-3. List available resources using `resources/list`
-
-**Expected Results**:
-- Server responds with protocol version `2024-11-05`
-- Tools available: `start_job`, `update_task`, `complete_task`, `report_problem`
-- Resources available: `get_all_jobs`, `get_job_tasks`
-
-**Success Criteria**: ✅ All 4 tools and 2 resources are present
+1. Connect to MCP server using initialize handshake - your client might do this automatically - can you see the tools?
 
 ---
 
